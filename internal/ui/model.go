@@ -125,10 +125,10 @@ func (m Model) View() string {
 func (m Model) renderLoading() string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("46"))
+		Foreground(themeColor("#1f883d", "#3fb950"))
 
 	loadingStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("248")).
+		Foreground(themeColor("#57606a", "#8b949e")).
 		MarginTop(2)
 
 	loadingText := "Authenticating with GitHub..."
@@ -147,20 +147,23 @@ func (m Model) renderLoading() string {
 func (m Model) renderDisplay() string {
 	cardStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
+		BorderForeground(themeColor("#d0d7de", "#30363d")).
 		Padding(1, 2)
 
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("46")).
+		Foreground(themeColor("#1f883d", "#3fb950")).
 		MarginBottom(1)
 
+	heatmapStyle := lipgloss.NewStyle().
+		Foreground(themeColor("#57606a", "#8b949e"))
+
 	statsStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("245")).
+		Foreground(themeColor("#57606a", "#8b949e")).
 		MarginTop(1)
 
 	usernameStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("34")).
+		Foreground(themeColor("#0969da", "#58a6ff")).
 		Bold(true)
 
 	total := getTotalContributions(m.days)
@@ -169,7 +172,7 @@ func (m Model) renderDisplay() string {
 
 	content := titleStyle.Render("GitHub Contribution Heatmap") + "\n"
 	content += usernameStyle.Render("@"+m.username) + "\n\n"
-	content += m.heatmapText + "\n"
+	content += heatmapStyle.Render(m.heatmapText) + "\n"
 	content += statsStyle.Render(
 		fmt.Sprintf(
 			"Total: %d • Current streak: %d days • Longest streak: %d days • %s",
@@ -189,18 +192,18 @@ func (m Model) renderDisplay() string {
 func (m Model) renderError() string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("34")).
+		Foreground(themeColor("#1f883d", "#3fb950")).
 		MarginBottom(1)
 
 	errorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("196")).
+		Foreground(themeColor("#cf222e", "#f85149")).
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("196")).
+		BorderForeground(themeColor("#cf222e", "#f85149")).
 		Padding(1).
 		MarginTop(2)
 
 	instructionsStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("243")).
+		Foreground(themeColor("#57606a", "#8b949e")).
 		MarginTop(2)
 
 	content := titleStyle.Render("🔥 GitHub Heatmap") + "\n"
@@ -282,4 +285,8 @@ func getContributionStreaks(days []github.Day) (int, int) {
 	}
 
 	return current, longest
+}
+
+func themeColor(light, dark string) lipgloss.AdaptiveColor {
+	return lipgloss.AdaptiveColor{Light: light, Dark: dark}
 }

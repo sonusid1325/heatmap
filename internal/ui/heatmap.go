@@ -10,6 +10,12 @@ import (
 	"sonusid.in/heatmap/internal/github"
 )
 
+const (
+	cellFillActive = "▣"
+	cellFillEmpty  = "□"
+	cellGap        = " "
+)
+
 // HeatmapRenderer renders GitHub contribution heatmap
 type HeatmapRenderer struct {
 	days []github.Day
@@ -85,7 +91,9 @@ func (h *HeatmapRenderer) renderGitHubStyle(dayMap map[string]int) string {
 	}
 	result.WriteString("\n")
 
-	innerWidth := len(weekStarts)*3 - 1
+	cellWidth := lipgloss.Width(cellFillActive)
+	gapWidth := lipgloss.Width(cellGap)
+	innerWidth := len(weekStarts)*cellWidth + (len(weekStarts)-1)*gapWidth
 	result.WriteString("    ┌")
 	result.WriteString(strings.Repeat("─", innerWidth))
 	result.WriteString("┐\n")
@@ -99,7 +107,7 @@ func (h *HeatmapRenderer) renderGitHubStyle(dayMap map[string]int) string {
 			count := dayMap[date.Format("2006-01-02")]
 			result.WriteString(h.renderCell(count))
 			if i < len(weekStarts)-1 {
-				result.WriteString(" ")
+				result.WriteString(cellGap)
 			}
 		}
 		result.WriteString("│\n")
@@ -113,7 +121,7 @@ func (h *HeatmapRenderer) renderGitHubStyle(dayMap map[string]int) string {
 	for i := 0; i <= 5; i++ {
 		result.WriteString(h.renderLegendCell(i))
 		if i < 5 {
-			result.WriteString(" ")
+			result.WriteString(cellGap)
 		}
 	}
 	result.WriteString(" More")
@@ -142,15 +150,25 @@ func (h *HeatmapRenderer) getIntensity(count int) int {
 
 func (h *HeatmapRenderer) renderCell(count int) string {
 	intensity := h.getIntensity(count)
+	fill := cellFillActive
+	if intensity == 0 {
+		fill = cellFillEmpty
+	}
+
 	return lipgloss.NewStyle().
-		Background(h.colorForIntensity(intensity)).
-		Render("  ")
+		Foreground(h.colorForIntensity(intensity)).
+		Render(fill)
 }
 
 func (h *HeatmapRenderer) renderLegendCell(intensity int) string {
+	fill := cellFillActive
+	if intensity == 0 {
+		fill = cellFillEmpty
+	}
+
 	return lipgloss.NewStyle().
-		Background(h.colorForIntensity(intensity)).
-		Render("  ")
+		Foreground(h.colorForIntensity(intensity)).
+		Render(fill)
 }
 
 func (h *HeatmapRenderer) monthLabelForWeek(weekStart time.Time) string {
@@ -163,15 +181,15 @@ func (h *HeatmapRenderer) monthLabelForWeek(weekStart time.Time) string {
 	return "   "
 }
 
-func (h *HeatmapRenderer) colorForIntensity(intensity int) lipgloss.Color {
-	// GitHub green colors (from dark to bright)
-	colors := []lipgloss.Color{
-		lipgloss.Color("237"), // #0e1117 (very dark/empty)
-		lipgloss.Color("22"),  // dark green
-		lipgloss.Color("28"),  // medium dark green
-		lipgloss.Color("34"),  // medium green
-		lipgloss.Color("40"),  // bright green
-		lipgloss.Color("46"),  // brightest green
+func (h *HeatmapRenderer) colorForIntensity(intensity int) lipgloss.TerminalColor {
+	// Adaptive GitHub-like palette (light + dark terminal themes).
+	colors := []lipgloss.TerminalColor{
+		lipgloss.AdaptiveColor{Light: "#afb8c1", Dark: "#484f58"}, // empty
+		lipgloss.AdaptiveColor{Light: "#9be9a8", Dark: "#0e4429"},
+		lipgloss.AdaptiveColor{Light: "#40c463", Dark: "#006d32"},
+		lipgloss.AdaptiveColor{Light: "#30a14e", Dark: "#26a641"},
+		lipgloss.AdaptiveColor{Light: "#216e39", Dark: "#39d353"},
+		lipgloss.AdaptiveColor{Light: "#0e4429", Dark: "#56d364"},
 	}
 
 	if intensity < 0 {
