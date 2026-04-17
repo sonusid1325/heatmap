@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -35,15 +36,11 @@ func (h *HeatmapRenderer) Render() string {
 }
 
 func (h *HeatmapRenderer) renderGitHubStyle(dayMap map[string]int) string {
-	var result strings.Builder
-
-	// Get date range
 	if len(h.days) == 0 {
 		return ""
 	}
 
-	// Parse dates
-	var dates []time.Time
+	dates := make([]time.Time, 0, len(h.days))
 	for _, day := range h.days {
 		t, err := time.Parse("2006-01-02", day.Date)
 		if err != nil {
@@ -51,51 +48,75 @@ func (h *HeatmapRenderer) renderGitHubStyle(dayMap map[string]int) string {
 		}
 		dates = append(dates, t)
 	}
-
 	if len(dates) == 0 {
 		return ""
 	}
 
-	// Sort dates
-	for i := 0; i < len(dates); i++ {
-		for j := i + 1; j < len(dates); j++ {
-			if dates[j].Before(dates[i]) {
-				dates[i], dates[j] = dates[j], dates[i]
-			}
-		}
-	}
+	sort.Slice(dates, func(i, j int) bool {
+		return dates[i].Before(dates[j])
+	})
 
 	startDate := dates[0]
 	endDate := dates[len(dates)-1]
-
-	// Find Sunday of the week containing startDate
 	for startDate.Weekday() != time.Sunday {
 		startDate = startDate.AddDate(0, 0, -1)
 	}
+	for endDate.Weekday() != time.Saturday {
+		endDate = endDate.AddDate(0, 0, 1)
+	}
 
-	// Render day names row
-	dayNames := []string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}
-	result.WriteString("     ")
-	for _, name := range dayNames {
-		result.WriteString(name + "  ")
+	weekStarts := make([]time.Time, 0)
+	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 7) {
+		weekStarts = append(weekStarts, d)
+	}
+	if len(weekStarts) == 0 {
+		return ""
+	}
+
+	var result strings.Builder
+
+	// Month labels (GitHub-style, shown at month boundaries).
+	result.WriteString("    ")
+	for i, weekStart := range weekStarts {
+		result.WriteString(h.monthLabelForWeek(weekStart))
+		if i < len(weekStarts)-1 {
+			result.WriteString(" ")
+		}
 	}
 	result.WriteString("\n")
 
-	// Render the heatmap grid (7 rows for days of week)
-	for dayOfWeek := 0; dayOfWeek < 7; dayOfWeek++ {
-		dayName := dayNames[dayOfWeek]
-		result.WriteString(fmt.Sprintf("%s    ", dayName[:1]))
+	innerWidth := len(weekStarts)*3 - 1
+	result.WriteString("    ┌")
+	result.WriteString(strings.Repeat("─", innerWidth))
+	result.WriteString("┐\n")
 
-		// Render columns (weeks)
-		for d := startDate; d.Before(endDate) || d.Equal(endDate); d = d.AddDate(0, 0, 1) {
-			if int(d.Weekday()) == dayOfWeek {
-				count := dayMap[d.Format("2006-01-02")]
-				cell := h.renderCell(count)
-				result.WriteString(cell + " ")
+	rowLabels := []string{"   ", "Mon", "   ", "Wed", "   ", "Fri", "   "}
+	for dayOfWeek := 0; dayOfWeek < 7; dayOfWeek++ {
+		result.WriteString(fmt.Sprintf("%3s │", rowLabels[dayOfWeek]))
+
+		for i, weekStart := range weekStarts {
+			date := weekStart.AddDate(0, 0, dayOfWeek)
+			count := dayMap[date.Format("2006-01-02")]
+			result.WriteString(h.renderCell(count))
+			if i < len(weekStarts)-1 {
+				result.WriteString(" ")
 			}
 		}
-		result.WriteString("\n")
+		result.WriteString("│\n")
 	}
+
+	result.WriteString("    └")
+	result.WriteString(strings.Repeat("─", innerWidth))
+	result.WriteString("┘\n")
+
+	result.WriteString("      Less ")
+	for i := 0; i <= 5; i++ {
+		result.WriteString(h.renderLegendCell(i))
+		if i < 5 {
+			result.WriteString(" ")
+		}
+	}
+	result.WriteString(" More")
 
 	return result.String()
 }
@@ -121,30 +142,43 @@ func (h *HeatmapRenderer) getIntensity(count int) int {
 
 func (h *HeatmapRenderer) renderCell(count int) string {
 	intensity := h.getIntensity(count)
-	// GitHub green colors (from dark to bright)
-	colors := []lipgloss.Color{
-		lipgloss.Color("237"),  // #0e1117 (very dark/empty)
-		lipgloss.Color("22"),   // dark green
-		lipgloss.Color("28"),   // medium dark green
-		lipgloss.Color("34"),   // medium green
-		lipgloss.Color("40"),   // bright green
-		lipgloss.Color("46"),   // brightest green
-	}
-
-	style := lipgloss.NewStyle().
-		Background(colors[intensity]).
-		Foreground(lipgloss.Color("0")).
-		Width(2).
-		Height(1).
-		Align(lipgloss.Center)
-
-	return style.Render("█")
+	return lipgloss.NewStyle().
+		Background(h.colorForIntensity(intensity)).
+		Render("  ")
 }
 
-func (h *HeatmapRenderer) renderEmptyCell() string {
-	style := lipgloss.NewStyle().
-		Background(lipgloss.Color("237")).
-		Foreground(lipgloss.Color("0"))
+func (h *HeatmapRenderer) renderLegendCell(intensity int) string {
+	return lipgloss.NewStyle().
+		Background(h.colorForIntensity(intensity)).
+		Render("  ")
+}
 
-	return style.Render(" ")
+func (h *HeatmapRenderer) monthLabelForWeek(weekStart time.Time) string {
+	for i := 0; i < 7; i++ {
+		d := weekStart.AddDate(0, 0, i)
+		if d.Day() == 1 {
+			return d.Format("Jan")
+		}
+	}
+	return "   "
+}
+
+func (h *HeatmapRenderer) colorForIntensity(intensity int) lipgloss.Color {
+	// GitHub green colors (from dark to bright)
+	colors := []lipgloss.Color{
+		lipgloss.Color("237"), // #0e1117 (very dark/empty)
+		lipgloss.Color("22"),  // dark green
+		lipgloss.Color("28"),  // medium dark green
+		lipgloss.Color("34"),  // medium green
+		lipgloss.Color("40"),  // bright green
+		lipgloss.Color("46"),  // brightest green
+	}
+
+	if intensity < 0 {
+		return colors[0]
+	}
+	if intensity >= len(colors) {
+		return colors[len(colors)-1]
+	}
+	return colors[intensity]
 }
